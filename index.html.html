@@ -1,0 +1,233 @@
+<!-- 由 鼎聯會計稅務記帳士事務所 × Claire 製作 -->
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+<title>LABUBU 俄羅斯方塊 — 七彩霓虹豪華版</title>
+<style>
+  :root{
+    --bg:#0b0f17; --stroke:#1f2a44; --accent:#67e8f9;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0;
+    background: radial-gradient(1000px 600px at 70% -10%, #1b2b52aa 0%, transparent 60%), var(--bg);
+    color:#e5e7eb;
+    font-family: ui-sans-serif, system-ui, -apple-system, "Noto Sans TC", Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+  }
+  .wrap{min-height:100%; display:flex; align-items:center; justify-content:center; padding:16px}
+  .game{display:grid; grid-template-columns:auto minmax(240px, 28vw); gap:18px; align-items:start; filter: drop-shadow(0 10px 25px rgba(0,0,0,.45));}
+  .panel{background:linear-gradient(180deg, #0f1424 0%, #0b0f18 100%); border:1px solid var(--stroke); border-radius:16px; padding:14px}
+  .stage{padding:10px}
+  canvas#stage{display:block; background:#0b0f17; border-radius:12px; box-shadow: inset 0 0 0 1px var(--stroke), 0 0 40px #0a0f1a;}
+  .title{font-size:20px; letter-spacing:.2px; opacity:.95}
+  .stat{display:flex; justify-content:space-between; margin-top:6px; font-weight:700}
+  .bar{margin-top:12px; height:8px; background:#0d1220; border-radius:999px; overflow:hidden}
+  .bar>div{height:100%; background:linear-gradient(90deg, #60a5fa, #22d3ee); width:0%}
+  .muted{font-size:12px; color:#9ca3af;}
+  /* Overlays */
+  .overlay{position:fixed; inset:0; background: radial-gradient(900px 600px at 50% -10%, rgba(34,211,238,.12), transparent 40%), rgba(0,0,0,.55); display:flex; align-items:center; justify-content:center;}
+  .card{background:linear-gradient(180deg,#0c1220,#090d17); border:1px solid var(--stroke); border-radius:18px; padding:28px; width:min(92vw, 520px); text-align:center; box-shadow:0 20px 60px rgba(0,0,0,.45)}
+  .card h1{margin:0 0 8px; font-size:28px}
+  .btn{appearance:none; border:none; border-radius:12px; padding:12px 18px; font-weight:800; cursor:pointer; margin-top:14px; color:#0b0f14; background:linear-gradient(180deg,#67e8f9,#22d3ee); box-shadow:0 8px 24px rgba(34,211,238,.45);}
+  .btn:active{transform:translateY(1px)}
+  .pop{animation:pop .5s ease-out both}
+  @keyframes pop{0%{transform:scale(.96); opacity:0}100%{transform:scale(1); opacity:1}}
+  /* Touch UI */
+  .touch{position:fixed; left:0; right:0; bottom:10px; display:flex; justify-content:center; gap:10px;}
+  .tbtn{user-select:none; -webkit-user-select:none; touch-action:manipulation; font-weight:800; font-size:14px; min-width:64px; padding:10px 12px; border-radius:12px; border:1px solid var(--stroke); background:#0f1524aa; backdrop-filter: blur(6px); color:#cfeaf7}
+  @media (max-width: 900px){ .game{grid-template-columns:1fr} .touch{bottom:12px} }
+  /* 右下角浮水印 */
+  .watermark{
+    position:fixed; right:10px; bottom:10px; font-size:12px; color:#ffffffb3; pointer-events:none; user-select:none;
+    text-shadow:0 0 6px rgba(255,255,255,.2);
+  }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="game">
+      <div class="panel stage">
+        <canvas id="stage" width="300" height="600" aria-label="遊戲畫面"></canvas>
+      </div>
+      <div class="panel side">
+        <div class="title">LABUBU TETRIS</div>
+        <div class="stat"><span>分數</span><span id="score">0</span></div>
+        <div class="stat"><span>最高</span><span id="best">0</span></div>
+        <div class="stat"><span>等級</span><span id="level">1</span></div>
+        <div class="bar"><div id="speedbar"></div></div>
+        <div style="margin-top:16px"><div class="muted">鍵盤：← → 移動、↓ 快速落下、↑ 旋轉、空白鍵 直落</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Start Overlay -->
+  <div id="start" class="overlay">
+    <div class="card pop">
+      <h1>按任意鍵開始</h1>
+      <p class="muted">或點擊下方按鈕開始遊戲</p>
+      <div class="muted" style="margin-top:8px; color:#e5e7eb;">© 鼎聯會計稅務記帳士事務所 × Claire</div>
+      <button class="btn" id="startBtn">開始</button>
+    </div>
+  </div>
+
+  <!-- Game Over Overlay -->
+  <div id="over" class="overlay" style="display:none">
+    <div class="card pop">
+      <h1>遊戲結束</h1>
+      <p>分數 <b id="finalScore">0</b></p>
+      <button class="btn" id="restartBtn">重新開始</button>
+    </div>
+  </div>
+
+  <!-- Touch Controls -->
+  <div class="touch" id="touchUI" style="display:none">
+    <button class="tbtn" data-act="left">←</button>
+    <button class="tbtn" data-act="rotate">↻</button>
+    <button class="tbtn" data-act="right">→</button>
+    <button class="tbtn" data-act="down">↓</button>
+    <button class="tbtn" data-act="drop">直落</button>
+  </div>
+
+  <!-- Watermark -->
+  <div class="watermark">© 鼎聯會計稅務記帳士事務所 × Claire</div>
+
+<script>
+/********************
+ * 常數與元素
+ ********************/
+const COLS=10, ROWS=20, CELL=30;
+const canvas=document.getElementById('stage');
+const ctx=canvas.getContext('2d');
+const scoreEl=document.getElementById('score');
+const bestEl=document.getElementById('best');
+const levelEl=document.getElementById('level');
+const speedbarEl=document.getElementById('speedbar');
+const startOverlay=document.getElementById('start');
+const overOverlay=document.getElementById('over');
+const finalScoreEl=document.getElementById('finalScore');
+const touchUI=document.getElementById('touchUI');
+
+// 內嵌 LABUBU 貼圖（壓縮版 base64）
+const texImg=new Image();
+texImg.src = "data:image/jpeg;base64,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";
+let textureReady=false; texImg.onload=()=>textureReady=true;
+
+// 形狀顏色（淡霓虹外框）
+const TYPE_COLORS = {
+  I: 'rgba(96, 165, 250, 0.9)',   // 藍
+  O: 'rgba(249, 168, 212, 0.9)',  // 粉
+  T: 'rgba(165, 180, 252, 0.9)',  // 紫
+  L: 'rgba(134, 239, 172, 0.9)',  // 綠
+  J: 'rgba(250, 204, 21, 0.9)',   // 黃
+  S: 'rgba(248, 113, 113, 0.9)',  // 紅
+  Z: 'rgba(251, 146, 60, 0.9)',   // 橘
+};
+
+/********************
+ * 音效
+ ********************/
+const audioCtx=new (window.AudioContext||window.webkitAudioContext)();
+function beep(f=440,d=0.08,t='sine',g=0.06){const o=audioCtx.createOscillator(),gain=audioCtx.createGain();o.type=t;o.frequency.value=f;gain.gain.value=g;o.connect(gain).connect(audioCtx.destination);o.start();o.stop(audioCtx.currentTime+d);}
+function sfxClear(){beep(740,.08,'sawtooth');setTimeout(()=>beep(880,.08,'triangle'),80);}
+function sfxOver(){beep(220,.18,'square',.08);setTimeout(()=>beep(160,.22,'square',.08),160);}
+function sfxMove(){beep(520,.03,'triangle',.025);}
+function sfxRotate(){beep(610,.05,'triangle',.035);}
+
+/********************
+ * 狀態
+ ********************/
+let grid, current, next;
+let score=0, best = Number(localStorage.getItem('tetrisHighScore_labubu')||0);
+let level=1, tickBase=800, tick=800, lastTime=0, started=false, over=false;
+
+const SHAPES={
+  I:[ [ [0,1],[1,1],[2,1],[3,1] ], [ [2,0],[2,1],[2,2],[2,3] ] ],
+  J:[ [ [0,0],[0,1],[1,1],[2,1] ], [ [1,0],[2,0],[1,1],[1,2] ], [ [0,1],[1,1],[2,1],[2,2] ], [ [1,0],[1,1],[0,2],[1,2] ] ],
+  L:[ [ [2,0],[0,1],[1,1],[2,1] ], [ [1,0],[1,1],[1,2],[2,2] ], [ [0,1],[1,1],[2,1],[0,2] ], [ [0,0],[1,0],[1,1],[1,2] ] ],
+  O:[ [ [1,0],[2,0],[1,1],[2,1] ] ],
+  S:[ [ [1,0],[2,0],[0,1],[1,1] ], [ [1,0],[1,1],[2,1],[2,2] ] ],
+  T:[ [ [1,0],[0,1],[1,1],[2,1] ], [ [1,0],[1,1],[2,1],[1,2] ], [ [0,1],[1,1],[2,1],[1,2] ], [ [1,0],[0,1],[1,1],[1,2] ] ],
+  Z:[ [ [0,0],[1,0],[1,1],[2,1] ], [ [2,0],[1,1],[2,1],[1,2] ] ],
+};
+const TYPES = Object.keys(SHAPES);
+
+/********************
+ * 初始化與生成
+ ********************/
+function reset(){
+  grid = new Array(ROWS).fill(0).map(()=>new Array(COLS).fill(null)); // 存 shape type 或 null
+  score=0; level=1; tick=tickBase; lastTime=0; over=false;
+  current=null; next = randomPiece();
+  scoreEl.textContent='0'; levelEl.textContent='1'; speedbarEl.style.width='0%';
+}
+function randomPiece(){ const t=TYPES[(Math.random()*TYPES.length)|0]; return {t, r:0, x:3, y:0}; }
+function spawn(){ current = next || randomPiece(); current.x=3; current.y=0; current.r=0; next = randomPiece(); if (collide(0,0,0)) return endGame(); }
+
+/********************
+ * 操作
+ ********************/
+function rotate(){ if(!current||over) return; const nr=(current.r+1)%SHAPES[current.t].length; if(!collide(0,0,nr)) current.r=nr; else if(!collide(-1,0,nr)) {current.x--; current.r=nr;} else if(!collide(1,0,nr)) {current.x++; current.r=nr;} sfxRotate(); draw(); }
+function move(dx){ if(!current||over) return; if(!collide(dx,0,0)) { current.x+=dx; sfxMove(); draw(); } }
+function softDrop(){ if(!current||over) return; if(!collide(0,1,0)) current.y++; else lock(); draw(); }
+function hardDrop(){ if(!current||over) return; while(!collide(0,1,0)) current.y++; lock(); draw(); }
+
+function collide(dx,dy,dr){ const r=(current.r+dr)%SHAPES[current.t].length; for(const [cx,cy] of SHAPES[current.t][r]){ const x=current.x+cx+dx; const y=current.y+cy+dy; if(x<0||x>=COLS||y>=ROWS) return true; if(y>=0&&grid[y][x]) return true;} return false; }
+function lock(){ for(const [cx,cy] of SHAPES[current.t][current.r]){ const x=current.x+cx, y=current.y+cy; if(y>=0) grid[y][x]=current.t; } lineCheck(); spawn(); }
+
+function lineCheck(){ let cleared=0; for(let y=ROWS-1;y>=0;--y){ if(grid[y].every(v=>!!v)){ grid.splice(y,1); grid.unshift(new Array(COLS).fill(null)); y++; cleared++; } } if(cleared>0){ score += cleared; level = 1 + Math.floor(score/8); tick = Math.max(120, tickBase - (level-1)*60); scoreEl.textContent=score; levelEl.textContent=level; speedbarEl.style.width = (100 - (tick/ tickBase)*100)+'%'; sfxClear(); flash(); } }
+
+function flash(){ canvas.style.boxShadow='0 0 60px #22d3ee'; setTimeout(()=> canvas.style.boxShadow='inset 0 0 0 1px #1f2a44, 0 0 40px #0a0f1a', 140); }
+
+/********************
+ * 繪製
+ ********************/
+function draw(){
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  // 固定方塊
+  for(let y=0;y<ROWS;y++){ for(let x=0;x<COLS;x++){ const t=grid[y][x]; if(t) tile(x,y,t,false); } }
+  // 落下中
+  if(current){ for(const [cx,cy] of SHAPES[current.t][current.r]){ const x=current.x+cx, y=current.y+cy; if(y>=0) tile(x,y,current.t,true); } }
+}
+function tile(x,y,type,falling){
+  const px=x*CELL, py=y*CELL;
+  if(textureReady) ctx.drawImage(texImg, px, py, CELL, CELL);
+  // 霓虹外框（依形狀變色，淡光）
+  const glow = TYPE_COLORS[type] || 'rgba(125,211,252,0.8)';
+  ctx.save();
+  ctx.shadowColor = glow;
+  ctx.shadowBlur  = falling? 16 : 10;
+  ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+  ctx.strokeRect(px+0.5, py+0.5, CELL-1, CELL-1);
+  ctx.restore();
+}
+
+/********************
+ * 主循環
+ ********************/
+function loop(ts){ if(!started||over) return; if(!lastTime) lastTime=ts; const dt=ts-lastTime; if(dt>=tick){ softDrop(); lastTime=ts; } draw(); requestAnimationFrame(loop); }
+
+/********************
+ * 開始/結束
+ ********************/
+function startGame(){ if(started&&!over) return; startOverlay.style.display='none'; overOverlay.style.display='none'; reset(); started=true; spawn(); draw(); requestAnimationFrame(loop); }
+function endGame(){ over=true; started=false; finalScoreEl.textContent = score; if(score>best){ best=score; localStorage.setItem('tetrisHighScore_labubu', String(best)); } bestEl.textContent=best; overOverlay.style.display='flex'; sfxOver(); }
+
+/********************
+ * 事件
+ ********************/
+addEventListener('keydown',e=>{ if(!started){ startGame(); return; } if(over) return; switch(e.key){ case 'ArrowLeft': move(-1); break; case 'ArrowRight': move(1); break; case 'ArrowDown': softDrop(); break; case 'ArrowUp': rotate(); break; case ' ': e.preventDefault(); hardDrop(); break; } });
+const isTouch = matchMedia('(pointer:coarse)').matches; if(isTouch) touchUI.style.display='flex';
+for(const b of document.querySelectorAll('.tbtn')){ b.addEventListener('click',()=>{ const act=b.dataset.act; if(!started){ startGame(); return; } const map={left:()=>move(-1), right:()=>move(1), down:()=>softDrop(), rotate:()=>rotate(), drop:()=>hardDrop()}; map[act] && map[act](); }); }
+let sx=0, sy=0; canvas.addEventListener('touchstart', e=>{ const t=e.touches[0]; sx=t.clientX; sy=t.clientY; }, {passive:true});
+canvas.addEventListener('touchend', e=>{ const dx=e.changedTouches[0].clientX - sx, dy=e.changedTouches[0].clientY - sy; const ax=Math.abs(dx), ay=Math.abs(dy); if(!started){ startGame(); return; } if(Math.max(ax,ay) < 12){ rotate(); return; } if(ax>ay){ dx>0? move(1):move(-1); } else { dy>0? softDrop(): hardDrop(); } }, {passive:true});
+// 開始鍵
+document.getElementById('startBtn').onclick=startGame;
+document.getElementById('restartBtn').onclick=startGame;
+// 初始
+bestEl.textContent = best;
+</script>
+</body>
+</html>
